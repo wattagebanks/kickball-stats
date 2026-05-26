@@ -3,7 +3,9 @@ import type { Game, Player, PositionId } from "../types";
 import { POSITIONS } from "../types";
 import {
   aggregatePlayerStats,
+  averageRating,
   battingAverage,
+  bestPositionFor,
   fieldingPct,
   fmt3,
   onBasePct,
@@ -133,6 +135,133 @@ export function Dashboard({ players, games }: DashboardProps) {
                     <td>{s ? fmt3(fieldingPct(s)) : ".000"}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Defensive performance by position</h2>
+        {players.length === 0 ? (
+          <div className="empty">No players yet.</div>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  {POSITIONS.map((p) => (
+                    <th key={p.id} title={p.label}>
+                      {p.id}
+                    </th>
+                  ))}
+                  <th title="Best infield position (by average rating)">
+                    Best IF
+                  </th>
+                  <th title="Best outfield position (by average rating)">
+                    Best OF
+                  </th>
+                  <th>Latest notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.map((p) => {
+                  const s = stats[p.id];
+                  const bestIF = bestPositionFor(s, "infield");
+                  const bestOF = bestPositionFor(s, "outfield");
+                  const latestNotes: { pos: PositionId; text: string }[] = [];
+                  if (s) {
+                    for (const pos of POSITIONS) {
+                      const bucket = s.byPosition[pos.id as PositionId];
+                      if (!bucket) continue;
+                      for (const note of bucket.lastNotes) {
+                        latestNotes.push({
+                          pos: pos.id as PositionId,
+                          text: note,
+                        });
+                      }
+                    }
+                  }
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <strong>{p.name}</strong>
+                        {p.number && (
+                          <span className="muted"> #{p.number}</span>
+                        )}
+                      </td>
+                      {POSITIONS.map((pos) => {
+                        const posId = pos.id as PositionId;
+                        const avg = averageRating(s, posId);
+                        const sample =
+                          s?.byPosition[posId]?.ratingCount ?? 0;
+                        const isBest =
+                          (pos.side === "infield" && bestIF === posId) ||
+                          (pos.side === "outfield" && bestOF === posId);
+                        if (avg === undefined) {
+                          return (
+                            <td key={pos.id} className="muted">
+                              —
+                            </td>
+                          );
+                        }
+                        return (
+                          <td
+                            key={pos.id}
+                            className={isBest ? "best-spot" : undefined}
+                            title={
+                              isBest
+                                ? `Strongest ${pos.side} spot so far`
+                                : undefined
+                            }
+                          >
+                            <strong>{avg.toFixed(1)}★</strong>{" "}
+                            <span className="muted">({sample})</span>
+                          </td>
+                        );
+                      })}
+                      <td>
+                        {bestIF ? (
+                          <span className="pill side-pill side-infield">
+                            {bestIF}{" "}
+                            <span className="muted">
+                              {averageRating(s, bestIF)?.toFixed(1)}★
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {bestOF ? (
+                          <span className="pill side-pill side-outfield">
+                            {bestOF}{" "}
+                            <span className="muted">
+                              {averageRating(s, bestOF)?.toFixed(1)}★
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {latestNotes.length === 0 ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <ul className="latest-notes">
+                            {latestNotes.slice(0, 3).map((n, i) => (
+                              <li key={`${n.pos}-${i}`}>
+                                <span className="muted">{n.pos}:</span>{" "}
+                                {n.text}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

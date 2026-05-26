@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
-import type { Player, PositionId } from "../types";
+import type { Player, PlayerStats, PositionId } from "../types";
 import { POSITIONS } from "../types";
+import { averageRating, inningsAt, ratingSample } from "../stats";
 
 interface FieldProps {
   players: Player[];
   // playerId -> PositionId
   assignments: Record<string, PositionId>;
+  // Optional season-long stats used to surface each player's historical
+  // average rating at the position they're currently assigned to.
+  stats?: Record<string, PlayerStats>;
   onAssign: (playerId: string, position: PositionId | "BENCH") => void;
   onClear: () => void;
   onAuto?: () => void;
@@ -16,6 +20,7 @@ interface FieldProps {
 export function Field({
   players,
   assignments,
+  stats,
   onAssign,
   onClear,
   onAuto,
@@ -172,6 +177,14 @@ export function Field({
             const player = playerId ? playerById[playerId] : undefined;
             const filled = !!player;
             const isHover = hoverSlot === pos.id;
+            const playerStats = playerId ? stats?.[playerId] : undefined;
+            // Only surface the historical rating when the player has at least
+            // 2 prior innings at this exact spot AND has any rating recorded.
+            const ratingPrior =
+              filled && inningsAt(playerStats, pos.id) >= 2
+                ? averageRating(playerStats, pos.id)
+                : undefined;
+            const ratingCount = ratingSample(playerStats, pos.id);
             return (
               <g
                 key={pos.id}
@@ -195,6 +208,17 @@ export function Field({
                     <text className="label" dy="16">
                       {pos.id}
                     </text>
+                    {ratingPrior !== undefined && ratingCount > 0 && (
+                      <text
+                        className="rating-sub"
+                        dy="34"
+                        aria-label={`Average rating ${ratingPrior.toFixed(
+                          1,
+                        )} stars over ${ratingCount} games`}
+                      >
+                        {ratingPrior.toFixed(1)}★
+                      </text>
+                    )}
                   </>
                 ) : (
                   <>

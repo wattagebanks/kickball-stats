@@ -90,12 +90,27 @@ export interface FieldingPlay {
   notes?: string;
 }
 
+// A per-inning defensive note + 1–5 rating for the stint a player spent at a
+// given fielding position. Unlike FieldingPlay this is meant to capture how a
+// player performed at that spot, even when nothing dramatic happened.
+export type DefenseRating = 1 | 2 | 3 | 4 | 5;
+
+export interface FieldingNote {
+  id: string;
+  playerId: string;
+  position: PositionId;
+  rating?: DefenseRating;
+  notes?: string;
+}
+
 export interface Inning {
   number: number;
   // playerId -> PositionId map for fielding positions this inning.
   assignments: Record<string, PositionId>;
   kicking: KickingAtBat[];
   fielding: FieldingPlay[];
+  // Per-position defensive notes / ratings, keyed by (playerId, position).
+  defenseNotes?: FieldingNote[];
   runsFor: number;
   runsAgainst: number;
 }
@@ -126,6 +141,30 @@ export interface AppState {
   activeGameId?: string;
 }
 
+// Per-position fielding rollup for a single player.
+export interface PositionStats {
+  innings: number;
+  putouts: number;
+  assists: number;
+  errors: number;
+  ratingSum: number;
+  ratingCount: number;
+  // Most recent notes first, oldest last; capped to keep memory bounded.
+  lastNotes: string[];
+}
+
+export function emptyPositionStats(): PositionStats {
+  return {
+    innings: 0,
+    putouts: 0,
+    assists: 0,
+    errors: 0,
+    ratingSum: 0,
+    ratingCount: 0,
+    lastNotes: [],
+  };
+}
+
 // Aggregated per-player stats for the season (or a slice of games).
 export interface PlayerStats {
   playerId: string;
@@ -146,6 +185,7 @@ export interface PlayerStats {
   assists: number;
   errors: number;
   inningsByPosition: Record<PositionId, number>;
+  byPosition: Partial<Record<PositionId, PositionStats>>;
 }
 
 export function emptyPlayerStats(playerId: string): PlayerStats {
@@ -168,5 +208,6 @@ export function emptyPlayerStats(playerId: string): PlayerStats {
     assists: 0,
     errors: 0,
     inningsByPosition: {} as Record<PositionId, number>,
+    byPosition: {},
   };
 }

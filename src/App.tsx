@@ -151,6 +151,7 @@ export default function App() {
         <GameTab
           state={state}
           activeGame={activeGame}
+          seasonStats={seasonStats}
           onCreate={createGame}
           onSwitch={(id) => actions.setActiveGame(id)}
           onUpdateGame={(id, patch) => actions.updateGame(id, patch)}
@@ -242,6 +243,7 @@ export default function App() {
 interface GameTabProps {
   state: ReturnType<typeof useAppState>["state"];
   activeGame: Game | undefined;
+  seasonStats: ReturnType<typeof aggregatePlayerStats>;
   onCreate: () => void;
   onSwitch: (id: string) => void;
   onUpdateGame: (id: string, patch: Partial<Game>) => void;
@@ -251,6 +253,7 @@ interface GameTabProps {
 function GameTab({
   state,
   activeGame,
+  seasonStats,
   onCreate,
   onSwitch,
   onUpdateGame,
@@ -541,6 +544,7 @@ function GameTab({
           <Field
             players={state.team.players}
             assignments={currentInning.assignments}
+            stats={seasonStats}
             onAssign={assign}
             onClear={clearField}
             onAuto={autoFill}

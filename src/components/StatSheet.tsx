@@ -1,14 +1,32 @@
 import { useMemo } from "react";
 import type {
+  DefenseRating,
+  FieldingNote,
   FieldingPlay,
   Inning,
   KickingAtBat,
   KickResult,
   Player,
+  Position,
   PositionId,
 } from "../types";
-import { POSITIONS } from "../types";
+import { POSITION_BY_ID, POSITIONS } from "../types";
 import { uid } from "../storage";
+
+const RATING_VALUES: DefenseRating[] = [1, 2, 3, 4, 5];
+
+function sideLabel(side: Position["side"]): string {
+  switch (side) {
+    case "infield":
+      return "Infield";
+    case "outfield":
+      return "Outfield";
+    case "battery":
+      return "Battery";
+    case "bench":
+      return "Bench";
+  }
+}
 
 const KICK_RESULTS: { id: KickResult; label: string; hint: string }[] = [
   { id: "OUT", label: "Out", hint: "Made out" },
@@ -136,6 +154,84 @@ export function StatSheet({
     };
     onChange({ ...inning, fielding: [...inning.fielding, f] });
   }
+
+  // Defense notes are keyed by (playerId, position) — updating clears any
+  // existing entry for that exact pair and writes a fresh one with the patch
+  // applied. If the resulting record has neither a rating nor notes text, we
+  // drop it so the inning stays clean.
+  function upsertDefenseNote(
+    playerId: string,
+    position: PositionId,
+    patch: Partial<Pick<FieldingNote, "rating" | "notes">>,
+  ) {
+    const existing = (inning.defenseNotes ?? []).find(
+      (n) => n.playerId === playerId && n.position === position,
+    );
+    const merged: FieldingNote = {
+      id: existing?.id ?? uid(),
+      playerId,
+      position,
+      rating: existing?.rating,
+      notes: existing?.notes,
+      ...patch,
+    };
+    const cleanedNotes =
+      typeof merged.notes === "string" && merged.notes.length === 0
+        ? undefined
+        : merged.notes;
+    merged.notes = cleanedNotes;
+    const hasContent =
+      typeof merged.rating === "number" || (merged.notes ?? "").length > 0;
+    const others = (inning.defenseNotes ?? []).filter(
+      (n) => !(n.playerId === playerId && n.position === position),
+    );
+    onChange({
+      ...inning,
+      defenseNotes: hasContent ? [...others, merged] : others,
+    });
+  }
+
+  // Pull (playerId, position) rows from the inning's field assignments and
+  // attach any existing FieldingNote so the UI can edit-in-place.
+  const defenseRows = useMemo(() => {
+    const notesByKey: Record<string, FieldingNote> = {};
+    for (const n of inning.defenseNotes ?? []) {
+      notesByKey[`${n.playerId}|${n.position}`] = n;
+    }
+    const rows: {
+      player: Player;
+      position: Position;
+      note?: FieldingNote;
+    }[] = [];
+    for (const [pid, pos] of Object.entries(inning.assignments)) {
+      const player = playerById[pid];
+      const meta = POSITION_BY_ID[pos];
+      if (!player || !meta) continue;
+      rows.push({
+        player,
+        position: meta,
+        note: notesByKey[`${pid}|${pos}`],
+      });
+    }
+    // Sort by side (infield, outfield, battery, bench), then position label,
+    // then player name for stable rendering.
+    const sideRank: Record<Position["side"], number> = {
+      infield: 0,
+      battery: 1,
+      outfield: 2,
+      bench: 3,
+    };
+    rows.sort((a, b) => {
+      const sa = sideRank[a.position.side];
+      const sb = sideRank[b.position.side];
+      if (sa !== sb) return sa - sb;
+      if (a.position.id !== b.position.id) {
+        return a.position.id.localeCompare(b.position.id);
+      }
+      return a.player.name.localeCompare(b.player.name);
+    });
+    return rows;
+  }, [inning.assignments, inning.defenseNotes, playerById]);
 
   return (
     <div>
@@ -437,6 +533,112 @@ export function StatSheet({
                       >
                         Remove
                       </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Inning {inning.number} — Defense notes</h2>
+        <div className="row" style={{ marginBottom: 10 }}>
+          <span className="tiny">
+            Rate each player at the position they're playing right now. Notes
+            roll up into season-long defensive performance.
+          </span>
+        </div>
+
+        {defenseRows.length === 0 ? (
+          <div className="empty">
+            No players are assigned to positions in this inning yet. Drag
+            someone onto the field to start rating their defense.
+          </div>
+        ) : (
+          <div className="scroll-x">
+            <table>
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th style={{ width: 110 }}>Position</th>
+                  <th style={{ width: 220 }}>Rating</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {defenseRows.map(({ player, position, note }) => (
+                  <tr key={`${player.id}|${position.id}`}>
+                    <td>
+                      <strong>{player.name}</strong>
+                      {player.number && (
+                        <span className="muted"> #{player.number}</span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`pill side-pill side-${position.side}`}
+                        title={position.label}
+                      >
+                        {position.id} ·{" "}
+                        <span className="side-sub">
+                          {sideLabel(position.side)}
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      <div
+                        className="rating-row"
+                        role="radiogroup"
+                        aria-label={`Rate ${player.name} at ${position.label}`}
+                      >
+                        {RATING_VALUES.map((r) => {
+                          const selected = note?.rating === r;
+                          return (
+                            <button
+                              key={r}
+                              className={`rating-btn${
+                                selected ? " selected" : ""
+                              }`}
+                              role="radio"
+                              aria-checked={selected}
+                              title={`${r} star${r === 1 ? "" : "s"}`}
+                              onClick={() =>
+                                upsertDefenseNote(player.id, position.id, {
+                                  rating: selected ? undefined : r,
+                                })
+                              }
+                            >
+                              {r}★
+                            </button>
+                          );
+                        })}
+                        {note?.rating !== undefined && (
+                          <button
+                            className="rating-clear ghost"
+                            title="Clear rating"
+                            onClick={() =>
+                              upsertDefenseNote(player.id, position.id, {
+                                rating: undefined,
+                              })
+                            }
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <input
+                        placeholder={`Notes about ${player.name} at ${position.id}`}
+                        value={note?.notes ?? ""}
+                        onChange={(e) =>
+                          upsertDefenseNote(player.id, position.id, {
+                            notes: e.target.value,
+                          })
+                        }
+                      />
                     </td>
                   </tr>
                 ))}
