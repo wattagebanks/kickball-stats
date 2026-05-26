@@ -26,6 +26,7 @@ export function aggregatePlayerStats(
   for (const game of games) {
     for (const inn of game.innings) {
       for (const k of inn.kicking) {
+        if (k.pending) continue;
         const s = (out[k.playerId] ??= emptyPlayerStats(k.playerId));
         s.pa += 1;
         if (isAtBat(k.result)) s.ab += 1;

@@ -69,6 +69,11 @@ export interface KickingAtBat {
   rbi: number;
   runScored: boolean;
   notes?: string;
+  // A pending row is a placeholder seeded from the kicking lineup that the
+  // user has not yet logged. Pending rows are excluded from aggregated stats
+  // and are rendered in a muted style. Any user interaction (selecting a
+  // result, RBI change, run-scored change) flips this to false.
+  pending?: boolean;
 }
 
 // A fielding play credited to a player in a given inning.

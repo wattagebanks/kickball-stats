@@ -41,16 +41,44 @@ export function StatSheet({
     return m;
   }, [players]);
 
-  // Order to show kicking entries in: existing order from sheet + remaining batting order.
+  // Render kicking entries sorted by lineup order. Repeats (a player kicking
+  // a second time in the same inning) appear after the first full pass through
+  // the lineup. Stable on insertion index for ties / unknown players.
   const kickingOrdered = useMemo(() => {
-    return [...inning.kicking];
-  }, [inning.kicking]);
+    const lineupIdx = (pid: string) => {
+      const i = battingOrder.indexOf(pid);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    const seen: Record<string, number> = {};
+    const decorated = inning.kicking.map((k, originalIndex) => {
+      const occurrence = seen[k.playerId] ?? 0;
+      seen[k.playerId] = occurrence + 1;
+      return { k, originalIndex, occurrence, lineup: lineupIdx(k.playerId) };
+    });
+    decorated.sort((a, b) => {
+      if (a.occurrence !== b.occurrence) return a.occurrence - b.occurrence;
+      if (a.lineup !== b.lineup) return a.lineup - b.lineup;
+      return a.originalIndex - b.originalIndex;
+    });
+    return decorated.map((d) => d.k);
+  }, [inning.kicking, battingOrder]);
 
   function updateAtBat(id: string, patch: Partial<KickingAtBat>) {
     onChange({
       ...inning,
       kicking: inning.kicking.map((k) =>
         k.id === id ? { ...k, ...patch } : k,
+      ),
+    });
+  }
+
+  // Same as updateAtBat but also marks the row as no-longer-pending, since
+  // these interactions imply the user has logged a real result for this row.
+  function commitAtBat(id: string, patch: Partial<KickingAtBat>) {
+    onChange({
+      ...inning,
+      kicking: inning.kicking.map((k) =>
+        k.id === id ? { ...k, ...patch, pending: false } : k,
       ),
     });
   }
@@ -63,10 +91,12 @@ export function StatSheet({
   }
 
   function addAtBat(playerId?: string) {
-    // If no player passed, try to pick the next player in the lineup who hasn't kicked in this inning
-    // (or just pick the first batter).
+    // If no player passed, pick the next player in the lineup following the
+    // last *logged* kicker (ignore pending placeholders so wraparound works
+    // correctly for inning 1).
+    const logged = inning.kicking.filter((k) => !k.pending);
     const nextPlayer =
-      playerId ?? guessNextKicker(battingOrder, inning.kicking) ?? players[0]?.id;
+      playerId ?? guessNextKicker(battingOrder, logged) ?? players[0]?.id;
     if (!nextPlayer) return;
     const k: KickingAtBat = {
       id: uid(),
@@ -161,30 +191,45 @@ export function StatSheet({
               </thead>
               <tbody>
                 {kickingOrdered.map((k, idx) => (
-                  <tr key={k.id}>
+                  <tr key={k.id} className={k.pending ? "pending" : undefined}>
                     <td className="muted">{idx + 1}</td>
                     <td style={{ minWidth: 180 }}>
-                      <select
-                        value={k.playerId}
-                        onChange={(e) =>
-                          updateAtBat(k.id, { playerId: e.target.value })
-                        }
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
                       >
-                        {players.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                        <select
+                          value={k.playerId}
+                          onChange={(e) =>
+                            updateAtBat(k.id, { playerId: e.target.value })
+                          }
+                        >
+                          {players.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
+                        {k.pending && (
+                          <span className="pill pending-pill" title="Placeholder from lineup — not yet logged">
+                            pending
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td style={{ minWidth: 320 }}>
                       <div className="result-grid">
                         {KICK_RESULTS.map((r) => (
                           <button
                             key={r.id}
-                            className={k.result === r.id ? "selected" : ""}
+                            className={
+                              !k.pending && k.result === r.id ? "selected" : ""
+                            }
                             title={r.hint}
-                            onClick={() => updateAtBat(k.id, { result: r.id })}
+                            onClick={() => commitAtBat(k.id, { result: r.id })}
                           >
                             {r.label}
                           </button>
@@ -198,7 +243,7 @@ export function StatSheet({
                         min={0}
                         value={k.rbi}
                         onChange={(e) =>
-                          updateAtBat(k.id, { rbi: clampInt(e.target.value) })
+                          commitAtBat(k.id, { rbi: clampInt(e.target.value) })
                         }
                       />
                     </td>
@@ -207,7 +252,7 @@ export function StatSheet({
                         type="checkbox"
                         checked={k.runScored}
                         onChange={(e) =>
-                          updateAtBat(k.id, { runScored: e.target.checked })
+                          commitAtBat(k.id, { runScored: e.target.checked })
                         }
                         style={{ width: 18, height: 18 }}
                       />
@@ -238,7 +283,18 @@ export function StatSheet({
           </div>
         )}
         <div className="tiny" style={{ marginTop: 8 }}>
-          {playerById && <>Players logged: {kickingOrdered.length}</>}
+          {playerById && (
+            <>
+              At-bats logged: {kickingOrdered.filter((k) => !k.pending).length}
+              {kickingOrdered.some((k) => k.pending) && (
+                <>
+                  {" "}
+                  · Pending:{" "}
+                  {kickingOrdered.filter((k) => k.pending).length}
+                </>
+              )}
+            </>
+          )}
         </div>
       </div>
 

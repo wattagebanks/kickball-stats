@@ -5,8 +5,8 @@ import { Lineup } from "./components/Lineup";
 import { Roster } from "./components/Roster";
 import { StatSheet } from "./components/StatSheet";
 import { aggregatePlayerStats, suggestLineup } from "./stats";
-import { useAppState } from "./storage";
-import type { Game, Inning, PositionId } from "./types";
+import { uid, useAppState } from "./storage";
+import type { Game, Inning, KickingAtBat, PositionId } from "./types";
 
 type Tab = "game" | "roster" | "lineup" | "stats" | "data";
 
@@ -18,6 +18,57 @@ function emptyInning(number: number): Inning {
     fielding: [],
     runsFor: 0,
     runsAgainst: 0,
+  };
+}
+
+function makePendingAtBat(playerId: string): KickingAtBat {
+  return {
+    id: uid(),
+    playerId,
+    result: "OUT",
+    rbi: 0,
+    runScored: false,
+    pending: true,
+  };
+}
+
+// Build inning 1 pre-populated with one pending at-bat per player in the
+// kicking lineup, mirroring the order shown on the Lineup tab.
+function seedFirstInning(battingOrder: string[]): Inning {
+  return {
+    ...emptyInning(1),
+    kicking: battingOrder.map((pid) => makePendingAtBat(pid)),
+  };
+}
+
+// Keep inning 1's pending placeholder rows in sync with the kicking lineup:
+// add a pending row for any player newly in the lineup, drop pending rows for
+// players removed from the lineup. Rows the user has already touched
+// (pending === false) are preserved untouched. Visible ordering is handled by
+// the StatSheet at render time.
+function syncFirstInningPending(game: Game): Game {
+  if (game.innings.length === 0) return game;
+  const inn1 = game.innings[0];
+  const lineupSet = new Set(game.battingOrder);
+  const existing = new Set(inn1.kicking.map((k) => k.playerId));
+
+  let nextKicking = inn1.kicking.filter(
+    (k) => !k.pending || lineupSet.has(k.playerId),
+  );
+  const toAdd: KickingAtBat[] = [];
+  for (const pid of game.battingOrder) {
+    if (!existing.has(pid)) toAdd.push(makePendingAtBat(pid));
+  }
+  if (toAdd.length === 0 && nextKicking.length === inn1.kicking.length) {
+    return game;
+  }
+  nextKicking = [...nextKicking, ...toAdd];
+  return {
+    ...game,
+    innings: [
+      { ...inn1, kicking: nextKicking },
+      ...game.innings.slice(1),
+    ],
   };
 }
 
@@ -38,11 +89,12 @@ export default function App() {
   function createGame() {
     const today = new Date().toISOString().slice(0, 10);
     const opponent = prompt("Opponent name?", "") ?? "";
+    const order = state.team.players.map((p) => p.id);
     const game = actions.addGame({
       date: today,
       opponent: opponent.trim(),
-      battingOrder: state.team.players.map((p) => p.id),
-      innings: [emptyInning(1)],
+      battingOrder: order,
+      innings: [seedFirstInning(order)],
     });
     actions.setActiveGame(game.id);
     setTab("game");
@@ -123,14 +175,20 @@ export default function App() {
           stats={seasonStats}
           onChange={(order) => {
             if (activeGame) {
-              actions.updateGame(activeGame.id, { battingOrder: order });
+              const synced = syncFirstInningPending({
+                ...activeGame,
+                battingOrder: order,
+              });
+              actions.updateGame(activeGame.id, {
+                battingOrder: order,
+                innings: synced.innings,
+              });
             } else {
-              // No active game — create one and apply.
               const g = actions.addGame({
                 date: new Date().toISOString().slice(0, 10),
                 opponent: "",
                 battingOrder: order,
-                innings: [emptyInning(1)],
+                innings: [seedFirstInning(order)],
               });
               actions.setActiveGame(g.id);
             }
@@ -140,13 +198,20 @@ export default function App() {
               (p) => p.id,
             );
             if (activeGame) {
-              actions.updateGame(activeGame.id, { battingOrder: ordered });
+              const synced = syncFirstInningPending({
+                ...activeGame,
+                battingOrder: ordered,
+              });
+              actions.updateGame(activeGame.id, {
+                battingOrder: ordered,
+                innings: synced.innings,
+              });
             } else {
               const g = actions.addGame({
                 date: new Date().toISOString().slice(0, 10),
                 opponent: "",
                 battingOrder: ordered,
-                innings: [emptyInning(1)],
+                innings: [seedFirstInning(ordered)],
               });
               actions.setActiveGame(g.id);
             }
@@ -191,6 +256,18 @@ function GameTab({
   onRemoveGame,
 }: GameTabProps) {
   const [inningIdx, setInningIdx] = useState(0);
+
+  const totals = useMemo(() => {
+    return (
+      activeGame?.innings.reduce(
+        (acc, inn) => ({
+          rf: acc.rf + (inn.runsFor || 0),
+          ra: acc.ra + (inn.runsAgainst || 0),
+        }),
+        { rf: 0, ra: 0 },
+      ) ?? { rf: 0, ra: 0 }
+    );
+  }, [activeGame?.innings]);
 
   if (!activeGame) {
     return (
@@ -317,16 +394,6 @@ function GameTab({
       assignments: { ...prev.assignments },
     });
   }
-
-  const totals = useMemo(() => {
-    return activeGame.innings.reduce(
-      (acc, inn) => ({
-        rf: acc.rf + (inn.runsFor || 0),
-        ra: acc.ra + (inn.runsAgainst || 0),
-      }),
-      { rf: 0, ra: 0 },
-    );
-  }, [activeGame.innings]);
 
   return (
     <div>

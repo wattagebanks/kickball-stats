@@ -458,6 +458,21 @@ tr:hover td {
   border-color: var(--accent-strong);
 }
 
+tr.pending td {
+  opacity: 0.55;
+}
+
+tr.pending .pending-pill {
+  opacity: 1;
+  background: rgba(255, 204, 77, 0.08);
+  border-color: var(--line-strong);
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 10px;
+  padding: 2px 7px;
+}
+
 .scroll-x {
   overflow-x: auto;
 }
