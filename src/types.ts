@@ -67,6 +67,8 @@ export interface KickingAtBat {
   playerId: string;
   result: KickResult;
   rbi: number;
+  // Team runs that scored during this at-bat/play.
+  runsScored?: number;
   runScored: boolean;
   notes?: string;
   // A pending row is a placeholder seeded from the kicking lineup that the

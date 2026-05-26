@@ -103,6 +103,7 @@ export function StatSheet({
       playerId: nextPlayer,
       result: "OUT",
       rbi: 0,
+      runsScored: 0,
       runScored: false,
     };
     onChange({ ...inning, kicking: [...inning.kicking, k] });
@@ -184,7 +185,8 @@ export function StatSheet({
                   <th>Kicker</th>
                   <th>Result</th>
                   <th style={{ width: 70 }}>RBI</th>
-                  <th style={{ width: 60 }}>Run</th>
+                  <th style={{ width: 80 }}>Runs</th>
+                  <th style={{ width: 90 }}>Kicker scored</th>
                   <th></th>
                   <th style={{ width: 90 }}></th>
                 </tr>
@@ -244,6 +246,19 @@ export function StatSheet({
                         value={k.rbi}
                         onChange={(e) =>
                           commitAtBat(k.id, { rbi: clampInt(e.target.value) })
+                        }
+                      />
+                    </td>
+                    <td>
+                      <input
+                        className="small-input"
+                        type="number"
+                        min={0}
+                        value={k.runsScored ?? 0}
+                        onChange={(e) =>
+                          commitAtBat(k.id, {
+                            runsScored: clampInt(e.target.value),
+                          })
                         }
                       />
                     </td>

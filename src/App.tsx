@@ -27,6 +27,7 @@ function makePendingAtBat(playerId: string): KickingAtBat {
     playerId,
     result: "OUT",
     rbi: 0,
+    runsScored: 0,
     runScored: false,
     pending: true,
   };
