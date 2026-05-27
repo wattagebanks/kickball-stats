@@ -22,8 +22,11 @@ branch.
   each player's season OBP / SLG.
 - **Season dashboard** – Sortable stats table plus innings-by-position
   breakdown so you can see who's seeing time where.
-- **Local-first storage** – Everything lives in `localStorage`. Export to
-  JSON to back up or move between devices.
+- **Cloud sync via Cloudflare D1** – Stats are stored in a shared D1
+  database so every device that visits the site sees the same data. A
+  local cache keeps the UI snappy and offline-tolerant; edits push to D1
+  when a shared write password is configured on the Data tab. Export to
+  JSON to back up out-of-band.
 
 ## Getting started
 
@@ -49,5 +52,6 @@ This repo deploys to Cloudflare Pages via GitHub Actions:
 - Pushes to any other branch deploy to a preview URL of the form
   `https://<branch-name>.kickball-stats.pages.dev`
 
-See [`docs/DEPLOY.md`](./docs/DEPLOY.md) for the one-time setup of Cloudflare
-secrets in GitHub.
+See [`docs/DEPLOY.md`](./docs/DEPLOY.md) for the one-time setup of the D1
+database, the shared write password, and the Cloudflare secrets used by
+GitHub Actions.

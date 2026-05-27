@@ -602,3 +602,46 @@ td.best-spot {
   stroke-width: 3;
   letter-spacing: 0.2px;
 }
+
+/* Cloud sync status pill shown in the appbar and Data tab. */
+.sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.sync-pill .sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+
+.sync-good {
+  color: var(--good);
+  border-color: rgba(76, 175, 111, 0.4);
+}
+.sync-info {
+  color: #6fb3ff;
+  border-color: rgba(111, 179, 255, 0.4);
+}
+.sync-warn {
+  color: var(--accent);
+  border-color: rgba(255, 204, 77, 0.45);
+}
+.sync-danger {
+  color: var(--danger);
+  border-color: rgba(239, 84, 84, 0.45);
+}
+.sync-muted {
+  color: var(--text-muted);
+}

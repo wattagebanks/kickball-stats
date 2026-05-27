@@ -5,16 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:pages": "wrangler pages dev -- npm run dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "wrangler pages deploy dist --project-name=kickball-stats"
+    "deploy": "wrangler pages deploy dist --project-name=kickball-stats",
+    "db:create": "wrangler d1 create kickball-stats",
+    "db:migrate:local": "wrangler d1 execute kickball-stats --local --file=schema.sql",
+    "db:migrate:remote": "wrangler d1 execute kickball-stats --remote --file=schema.sql",
+    "db:set-password": "wrangler pages secret put WRITE_PASSWORD --project-name=kickball-stats"
   },
   "dependencies": {
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260527.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
@@ -26,6 +32,7 @@
     "globals": "^17.6.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "wrangler": "^4.95.0"
   }
 }

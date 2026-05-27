@@ -1,0 +1,20 @@
+{
+	// Wrangler configuration for the Cloudflare Pages project.
+	// The Pages build is driven by the `npm run build` script defined in
+	// package.json; this file only declares runtime bindings (D1, secrets)
+	// that the /functions/ directory needs to talk to.
+	//
+	// After running `npm run db:create` for the first time, copy the
+	// generated database_id into the d1_databases entry below.
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "kickball-stats",
+	"pages_build_output_dir": "./dist",
+	"compatibility_date": "2025-05-01",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "kickball-stats",
+			"database_id": "b30feef2-92bd-4071-9892-a50fcf9eaa3f"
+		}
+	]
+}
