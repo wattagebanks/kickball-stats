@@ -1,14 +1,16 @@
 // Pages Function backing /api/state.
 //
+// Authentication is handled upstream by functions/_middleware.ts: every
+// request to /api/* requires the kb_auth session cookie set by /login.
+// By the time we run, the caller is already authenticated, so both GET
+// and PUT can act unconditionally.
+//
 // GET  /api/state  -> returns the saved AppState JSON (or null on a brand
-//                     new database). Always 200, no auth required.
-// PUT  /api/state  -> stores the AppState JSON. Body MUST be a JSON object;
-//                     the X-Write-Password header MUST match the
-//                     WRITE_PASSWORD secret bound to this Pages project.
+//                     new database).
+// PUT  /api/state  -> stores the AppState JSON. Body MUST be a JSON object.
 
 interface Env {
   DB: D1Database;
-  WRITE_PASSWORD: string;
 }
 
 // Single-row blob table; we always operate on id = 1.
@@ -56,19 +58,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, env }) => {
-  if (!env.WRITE_PASSWORD) {
-    // Misconfiguration: refuse writes rather than silently accept everything.
-    return json(
-      { error: "Server is missing WRITE_PASSWORD secret." },
-      { status: 503 },
-    );
-  }
-
-  const supplied = request.headers.get("x-write-password") ?? "";
-  if (!timingSafeEqual(supplied, env.WRITE_PASSWORD)) {
-    return json({ error: "Bad write password." }, { status: 401 });
-  }
-
   const text = await request.text();
   if (text.length > MAX_BODY_BYTES) {
     return json({ error: "Payload too large." }, { status: 413 });
@@ -109,18 +98,3 @@ export const onRequest: PagesFunction<Env> = async ({ request, next }) => {
     headers: { allow: "GET, PUT" },
   });
 };
-
-// Constant-time string comparison so we don't leak the password byte-by-byte
-// through response timing. Both strings are encoded to bytes first so multi-
-// byte characters compare correctly.
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const ab = enc.encode(a);
-  const bb = enc.encode(b);
-  if (ab.byteLength !== bb.byteLength) return false;
-  let diff = 0;
-  for (let i = 0; i < ab.byteLength; i++) {
-    diff |= ab[i] ^ bb[i];
-  }
-  return diff === 0;
-}

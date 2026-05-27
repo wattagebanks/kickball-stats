@@ -5,7 +5,6 @@ import type { AppState, Game, Player, Team } from "./types";
 // truth in production is the D1-backed /api/state endpoint; the cache lets
 // the UI render instantly on cold load and survive transient network blips.
 const CACHE_KEY = "kickball-stats:v1";
-const PASSWORD_KEY = "kickball-stats:write-password";
 // How long to wait after the last edit before pushing the snapshot to D1.
 const SAVE_DEBOUNCE_MS = 600;
 
@@ -16,8 +15,6 @@ export type SyncStatus =
   | "idle"
   // Mid-flight PUT to /api/state.
   | "saving"
-  // No write password set locally; we render edits but never PUT them.
-  | "readonly"
   // Last server interaction failed (network or 5xx). Will retry on next edit.
   | "error"
   // The current environment has no /api/state endpoint (e.g. `npm run dev`
@@ -31,8 +28,6 @@ export interface SyncState {
   lastSyncedAt: string | null;
   /** Last error message from the API, cleared on the next success. */
   error: string | null;
-  /** True iff a write password is configured in this browser. */
-  hasWritePassword: boolean;
 }
 
 function uid(): string {
@@ -74,38 +69,24 @@ function writeCache(state: AppState): void {
   }
 }
 
-function loadStoredPassword(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(PASSWORD_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function persistPassword(value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (value) {
-      window.localStorage.setItem(PASSWORD_KEY, value);
-    } else {
-      window.localStorage.removeItem(PASSWORD_KEY);
-    }
-  } catch {
-    // Same as writeCache — best effort.
-  }
-}
-
 interface FetchedState {
   state: AppState | null;
   updatedAt: string | null;
 }
 
-// Shape of state changes that should trigger a debounced server save.
-// Local-only metadata changes (like the currently selected game on this
-// device) could be excluded here in the future without changing the API.
 function statesEqual(a: AppState, b: AppState): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// Any 401 from the API means our session cookie is missing or expired.
+// Bounce the user to the login page (preserving where they were) so they
+// can re-enter the team password and resume.
+function redirectToLogin(): void {
+  if (typeof window === "undefined") return;
+  const from = encodeURIComponent(
+    window.location.pathname + window.location.search,
+  );
+  window.location.assign(`/login?from=${from}`);
 }
 
 async function fetchStateFromServer(): Promise<FetchedState | "unavailable"> {
@@ -114,7 +95,14 @@ async function fetchStateFromServer(): Promise<FetchedState | "unavailable"> {
       method: "GET",
       headers: { accept: "application/json" },
       cache: "no-store",
+      credentials: "same-origin",
     });
+    if (res.status === 401) {
+      redirectToLogin();
+      // Pretend we're unavailable so the UI doesn't flash a spinner forever
+      // while the location swap is in flight.
+      return "unavailable";
+    }
     if (res.status === 404) return "unavailable";
     if (!res.ok) {
       throw new Error(`GET /api/state -> ${res.status}`);
@@ -131,16 +119,17 @@ async function fetchStateFromServer(): Promise<FetchedState | "unavailable"> {
 
 async function putStateToServer(
   state: AppState,
-  password: string,
 ): Promise<{ updatedAt: string }> {
   const res = await fetch("/api/state", {
     method: "PUT",
-    headers: {
-      "content-type": "application/json",
-      "x-write-password": password,
-    },
+    headers: { "content-type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify(state),
   });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("Session expired. Redirecting to sign in…");
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(
@@ -157,15 +146,10 @@ export function useAppState() {
   const [state, setStateRaw] = useState<AppState>(
     () => loadCache() ?? defaultState(),
   );
-  // Keep the password in React state so the save effect re-runs when the
-  // user pastes one in — that way newly-typed credentials immediately flush
-  // any unsaved local edits to D1.
-  const [password, setPassword] = useState<string>(() => loadStoredPassword());
   const [sync, setSync] = useState<SyncState>(() => ({
     status: "loading",
     lastSyncedAt: null,
     error: null,
-    hasWritePassword: loadStoredPassword().length > 0,
   }));
 
   // Snapshot of the last state we know the server has, used to skip saves
@@ -191,11 +175,11 @@ export function useAppState() {
         localOnlyRef.current = true;
         initializedRef.current = true;
         lastSavedRef.current = state;
-        setSync((s) => ({
-          ...s,
+        setSync({
           status: "local-only",
+          lastSyncedAt: null,
           error: null,
-        }));
+        });
         return;
       }
 
@@ -203,11 +187,11 @@ export function useAppState() {
         // Real network/server error talking to a deployed endpoint.
         initializedRef.current = true;
         lastSavedRef.current = state;
-        setSync((s) => ({
-          ...s,
+        setSync({
           status: "error",
+          lastSyncedAt: null,
           error: result.message,
-        }));
+        });
         return;
       }
 
@@ -225,34 +209,29 @@ export function useAppState() {
           status: "idle",
           lastSyncedAt: updatedAt,
           error: null,
-          hasWritePassword: password.length > 0,
         });
         return;
       }
 
-      // Server is empty. If we have a non-empty cache, try to migrate it up.
-      const migrationCandidate = cached ?? null;
+      // Server is empty. If we have a non-empty cache, migrate it up. We're
+      // already authenticated (middleware would have bounced us otherwise),
+      // so this PUT should always succeed.
       const hasMeaningfulCache =
-        migrationCandidate !== null &&
-        (migrationCandidate.team.players.length > 0 ||
-          migrationCandidate.games.length > 0);
+        cached !== null &&
+        (cached.team.players.length > 0 || cached.games.length > 0);
 
-      if (hasMeaningfulCache && password) {
+      if (hasMeaningfulCache) {
         try {
-          const { updatedAt: savedAt } = await putStateToServer(
-            migrationCandidate,
-            password,
-          );
+          const { updatedAt: savedAt } = await putStateToServer(cached);
           if (cancelled) return;
-          lastSavedRef.current = migrationCandidate;
+          lastSavedRef.current = cached;
           initializedRef.current = true;
-          setStateRaw(migrationCandidate);
-          writeCache(migrationCandidate);
+          setStateRaw(cached);
+          writeCache(cached);
           setSync({
             status: "idle",
             lastSyncedAt: savedAt,
             error: null,
-            hasWritePassword: true,
           });
           return;
         } catch (err) {
@@ -264,22 +243,19 @@ export function useAppState() {
             status: "error",
             lastSyncedAt: null,
             error: err instanceof Error ? err.message : String(err),
-            hasWritePassword: true,
           });
           return;
         }
       }
 
-      // Server is empty and we have nothing worth migrating (or no password
-      // to push with). Just mark us as ready; future edits will save normally
-      // once a password is configured.
+      // Server is empty and we have nothing worth migrating. Just mark us
+      // as ready; future edits will save normally.
       initializedRef.current = true;
       lastSavedRef.current = serverState;
       setSync({
-        status: password ? "idle" : "readonly",
+        status: "idle",
         lastSyncedAt: updatedAt,
         error: null,
-        hasWritePassword: password.length > 0,
       });
     })();
 
@@ -298,15 +274,11 @@ export function useAppState() {
     writeCache(state);
   }, [state]);
 
-  // Debounced server save. Re-armed on every state OR password change; only
-  // fires after SAVE_DEBOUNCE_MS of inactivity AND only once the initial
-  // load is done. Status transitions tied to the password being set or
-  // cleared live in setWritePassword itself, so this effect is purely about
-  // pushing pending writes to D1.
+  // Debounced server save. Fires after SAVE_DEBOUNCE_MS of inactivity once
+  // the initial load is done and we're online with /api/state.
   useEffect(() => {
     if (!initializedRef.current) return;
     if (localOnlyRef.current) return;
-    if (!password) return;
     if (lastSavedRef.current && statesEqual(lastSavedRef.current, state)) {
       return;
     }
@@ -315,82 +287,58 @@ export function useAppState() {
     const handle = window.setTimeout(async () => {
       setSync((s) => ({ ...s, status: "saving", error: null }));
       try {
-        const { updatedAt } = await putStateToServer(snapshot, password);
+        const { updatedAt } = await putStateToServer(snapshot);
         lastSavedRef.current = snapshot;
         setSync({
           status: "idle",
           lastSyncedAt: updatedAt,
           error: null,
-          hasWritePassword: true,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        // 401 means the saved password is wrong — drop into readonly so the
-        // user gets steered to the password field instead of a hard error.
-        const isAuth = /->\s*401/.test(message);
-        setSync((s) => ({
-          ...s,
-          status: isAuth ? "readonly" : "error",
-          error: message,
-        }));
+        setSync((s) => ({ ...s, status: "error", error: message }));
       }
     }, SAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(handle);
-  }, [state, password]);
+  }, [state]);
 
   const setState = useCallback((updater: (prev: AppState) => AppState) => {
     setStateRaw((prev) => updater(prev));
   }, []);
 
-  const setWritePassword = useCallback((value: string) => {
-    const trimmed = value.trim();
-    setPassword(trimmed);
-    persistPassword(trimmed);
-    setSync((s) => ({
-      ...s,
-      hasWritePassword: trimmed.length > 0,
-      // Clear stale errors so a fresh attempt isn't blocked by them.
-      error: null,
-      status:
-        s.status === "local-only"
-          ? "local-only"
-          : trimmed
-            ? s.status === "readonly"
-              ? "idle"
-              : s.status
-            : "readonly",
-    }));
-  }, []);
-
-  // Force a fresh save right now, ignoring the debounce. Used when the user
-  // hits a manual "Sync now" button or after typing in a password.
+  // Force a fresh save right now, ignoring the debounce. Used by the
+  // "Sync now" button on the Data tab.
   const forceSync = useCallback(async () => {
     if (localOnlyRef.current) return;
-    if (!password) {
-      setSync((s) => ({ ...s, status: "readonly", error: null }));
-      return;
-    }
     setSync((s) => ({ ...s, status: "saving", error: null }));
     try {
-      const { updatedAt } = await putStateToServer(state, password);
+      const { updatedAt } = await putStateToServer(state);
       lastSavedRef.current = state;
       setSync({
         status: "idle",
         lastSyncedAt: updatedAt,
         error: null,
-        hasWritePassword: true,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const isAuth = /->\s*401/.test(message);
-      setSync((s) => ({
-        ...s,
-        status: isAuth ? "readonly" : "error",
-        error: message,
-      }));
+      setSync((s) => ({ ...s, status: "error", error: message }));
     }
-  }, [state, password]);
+  }, [state]);
+
+  // Sign-out clears the session cookie server-side and bounces to /login.
+  const signOut = useCallback(async () => {
+    try {
+      await fetch("/api/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+    } catch {
+      // Even if the request fails (e.g. offline), still send the user to
+      // the login page so they can re-authenticate when connectivity is back.
+    }
+    redirectToLogin();
+  }, []);
 
   const actions = useMemo(
     () => ({
@@ -502,8 +450,8 @@ export function useAppState() {
     actions,
     uid,
     sync,
-    setWritePassword,
     forceSync,
+    signOut,
   };
 }
 

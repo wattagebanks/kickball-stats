@@ -8,8 +8,10 @@ The Cloudflare Pages project is named **`kickball-stats`**.
   (Cloudflare also publishes a per-deployment URL on every push.)
 
 Stats are persisted in a shared Cloudflare D1 database and read/written
-through a Pages Function at `/api/state`. Reads are open; writes require
-the shared `WRITE_PASSWORD` secret.
+through a Pages Function at `/api/state`. The entire site (HTML and API)
+is gated behind a single shared password stored as the `WRITE_PASSWORD`
+secret — visitors enter it once on a login page and the session cookie
+keeps them signed in for 30 days. Anyone signed in can read and write.
 
 ## D1 setup (one-time)
 
@@ -26,8 +28,8 @@ npm run db:create
 npm run db:migrate:local
 npm run db:migrate:remote
 
-# 4. Set the shared write password as a Pages secret. Anyone who
-#    knows this password can edit stats from the web UI.
+# 4. Set the shared team password as a Pages secret. Anyone who
+#    knows this password can sign in to view and edit stats.
 npm run db:set-password
 ```
 
@@ -39,15 +41,20 @@ database, which is fine for a hobby team.
 
 ### Local development against the D1 binding
 
-`npm run dev` (plain Vite) runs the frontend without `/api/state`, so the
-app falls back to a local-only mode. To run with the Pages Function and a
-local D1 file backing it, use:
+`npm run dev` (plain Vite) runs the frontend without `/api/state` and
+without the auth middleware, so the app falls back to local-only mode
+and skips the login screen — useful for UI work.
+
+To run with the Pages Function, the login gate, and a local D1 file
+backing it, use:
 
 ```bash
 echo 'WRITE_PASSWORD="dev-password"' > .dev.vars
 npm run db:migrate:local
 npm run dev:pages
 ```
+
+Then open the dev URL and sign in with `dev-password`.
 
 ## GitHub Actions
 

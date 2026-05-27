@@ -74,7 +74,7 @@ function syncFirstInningPending(game: Game): Game {
 }
 
 export default function App() {
-  const { state, actions, sync, setWritePassword, forceSync } = useAppState();
+  const { state, actions, sync, forceSync, signOut } = useAppState();
   const [tab, setTab] = useState<Tab>("game");
 
   const activeGame = useMemo(
@@ -236,8 +236,8 @@ export default function App() {
           onImport={actions.importJSON}
           onReset={actions.reset}
           sync={sync}
-          onSetWritePassword={setWritePassword}
           onForceSync={forceSync}
+          onSignOut={signOut}
         />
       )}
     </div>
@@ -577,8 +577,8 @@ interface DataTabProps {
   onImport: (s: string) => boolean;
   onReset: () => void;
   sync: SyncState;
-  onSetWritePassword: (s: string) => void;
   onForceSync: () => Promise<void>;
+  onSignOut: () => Promise<void>;
 }
 
 function DataTab({
@@ -590,12 +590,10 @@ function DataTab({
   onImport,
   onReset,
   sync,
-  onSetWritePassword,
   onForceSync,
+  onSignOut,
 }: DataTabProps) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [passwordDraft, setPasswordDraft] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
   function doExport() {
     const json = onExport();
@@ -641,81 +639,45 @@ function DataTab({
 
       <h2 style={{ marginTop: 0 }}>Cloud sync</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        Stats sync to a shared Cloudflare D1 database so they show up on every
-        device that visits this site. Reads are open; saving requires the
-        shared write password.
+        Stats sync to a shared Cloudflare D1 database so every signed-in
+        device sees the same data. You're already signed in — every edit
+        you make is saved automatically.
       </p>
-      <div className="grid cols-2">
-        <div>
-          <label className="tiny">Write password</label>
-          <div className="row" style={{ gap: 6 }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={passwordDraft}
-              placeholder={
-                sync.hasWritePassword
-                  ? "•••••••• (saved on this device)"
-                  : "Set the shared password"
-              }
-              onChange={(e) => setPasswordDraft(e.target.value)}
-              style={{ flex: 1, minWidth: 0 }}
-            />
-            <button onClick={() => setShowPassword((v) => !v)}>
-              {showPassword ? "Hide" : "Show"}
-            </button>
-            <button
-              className="primary"
-              disabled={passwordDraft.length === 0}
-              onClick={() => {
-                onSetWritePassword(passwordDraft);
-                setPasswordDraft("");
-              }}
-            >
-              Save
-            </button>
-            {sync.hasWritePassword && (
-              <button
-                className="ghost"
-                onClick={() => {
-                  onSetWritePassword("");
-                  setPasswordDraft("");
-                }}
-              >
-                Forget
-              </button>
-            )}
-          </div>
-        </div>
-        <div>
-          <label className="tiny">Status</label>
-          <div className="row" style={{ gap: 8, alignItems: "center" }}>
-            <SyncBadge sync={sync} />
-            <button
-              onClick={() => {
-                void onForceSync();
-              }}
-              disabled={
-                sync.status === "saving" ||
-                sync.status === "loading" ||
-                sync.status === "local-only" ||
-                !sync.hasWritePassword
-              }
-            >
-              Sync now
-            </button>
-          </div>
-          {sync.error && (
-            <div className="tiny" style={{ color: "var(--danger)", marginTop: 6 }}>
-              {sync.error}
-            </div>
-          )}
-          {sync.lastSyncedAt && (
-            <div className="tiny muted" style={{ marginTop: 6 }}>
-              Last synced {new Date(sync.lastSyncedAt).toLocaleString()}
-            </div>
-          )}
-        </div>
+      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        <SyncBadge sync={sync} />
+        <button
+          onClick={() => {
+            void onForceSync();
+          }}
+          disabled={
+            sync.status === "saving" ||
+            sync.status === "loading" ||
+            sync.status === "local-only"
+          }
+        >
+          Sync now
+        </button>
+        <button
+          className="ghost right"
+          onClick={() => {
+            if (confirm("Sign out of Kickball Stats on this device?")) {
+              void onSignOut();
+            }
+          }}
+        >
+          Sign out
+        </button>
       </div>
+      {sync.error && (
+        <div className="tiny" style={{ color: "var(--danger)", marginTop: 6 }}>
+          {sync.error}
+        </div>
+      )}
+      {sync.lastSyncedAt && (
+        <div className="tiny muted" style={{ marginTop: 6 }}>
+          Last synced {new Date(sync.lastSyncedAt).toLocaleString()}
+        </div>
+      )}
 
       <div className="divider" />
 
@@ -763,7 +725,6 @@ const SYNC_LABELS: Record<SyncState["status"], { label: string; tone: string }> 
   loading: { label: "Loading…", tone: "info" },
   idle: { label: "Synced", tone: "good" },
   saving: { label: "Saving…", tone: "info" },
-  readonly: { label: "Read-only", tone: "warn" },
   error: { label: "Sync error", tone: "danger" },
   "local-only": { label: "Local only", tone: "muted" },
 };
@@ -772,13 +733,11 @@ function SyncBadge({ sync }: { sync: SyncState }) {
   const { label, tone } = SYNC_LABELS[sync.status];
   const title =
     sync.error ??
-    (sync.status === "readonly"
-      ? "Set a write password on the Data tab to save changes to D1."
-      : sync.status === "local-only"
-        ? "No /api/state endpoint reachable — changes stay on this device."
-        : sync.lastSyncedAt
-          ? `Last synced ${new Date(sync.lastSyncedAt).toLocaleString()}`
-          : "");
+    (sync.status === "local-only"
+      ? "No /api/state endpoint reachable — changes stay on this device."
+      : sync.lastSyncedAt
+        ? `Last synced ${new Date(sync.lastSyncedAt).toLocaleString()}`
+        : "");
   return (
     <span className={`sync-pill sync-${tone}`} title={title}>
       <span className="sync-dot" aria-hidden />
