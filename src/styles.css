@@ -591,6 +591,60 @@ td.best-spot {
   padding-left: 8px;
 }
 
+/* Inline abbreviation with a hover tooltip. Keeps inherited color/weight so
+   it can appear inside tables, pills, paragraphs, etc. */
+.abbr {
+  border-bottom: 1px dotted var(--text-muted);
+  cursor: help;
+  text-decoration: none;
+  color: inherit;
+  font: inherit;
+}
+
+.abbr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Glossary card on the Stats tab. */
+.glossary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 18px;
+  margin-top: 6px;
+}
+
+.glossary-group {
+  margin-top: 10px;
+}
+
+.glossary-group h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.glossary dt {
+  font-weight: 700;
+  color: var(--text);
+  display: inline-block;
+  min-width: 44px;
+}
+
+.glossary dd {
+  display: inline;
+  margin: 0 0 0 6px;
+  color: var(--text-dim);
+}
+
+.glossary .row-item {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 /* SVG slot rating subscript for the field view. */
 .field-slot text.rating-sub {
   fill: var(--accent);

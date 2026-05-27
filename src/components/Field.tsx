@@ -185,6 +185,9 @@ export function Field({
                 ? averageRating(playerStats, pos.id)
                 : undefined;
             const ratingCount = ratingSample(playerStats, pos.id);
+            const tip = filled
+              ? `${player!.name} — ${pos.label} (${pos.id})`
+              : `${pos.label} (${pos.id})`;
             return (
               <g
                 key={pos.id}
@@ -199,6 +202,7 @@ export function Field({
                 onDrop={(e) => onSlotDrop(e, pos.id)}
                 onClick={() => quickAssign(pos.id)}
               >
+                <title>{tip}</title>
                 <circle r="46" />
                 {filled ? (
                   <>
@@ -249,9 +253,15 @@ export function Field({
         </div>
       )}
 
-      <div className="section-title">Bench</div>
+      <div
+        className="section-title"
+        title="Bench — players not currently playing the field"
+      >
+        Bench
+      </div>
       <div
         className={["bench", hoverSlot === "BENCH" ? "dragover" : ""].join(" ").trim()}
+        title="Drag a player here to send them to the bench (not currently playing the field)"
         onDragOver={(e) => onSlotDragOver(e, "BENCH")}
         onDragLeave={() => setHoverSlot(null)}
         onDrop={(e) => onSlotDrop(e, "BENCH")}

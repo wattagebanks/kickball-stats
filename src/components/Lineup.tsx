@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { Player, PlayerStats } from "../types";
 import { battingAverage, fmt3, onBasePct, sluggingPct } from "../stats";
+import { GLOSSARY } from "../glossary";
 
 interface LineupProps {
   players: Player[];
@@ -73,10 +74,18 @@ export function Lineup({
               <tr>
                 <th style={{ width: 36 }}>#</th>
                 <th>Player</th>
-                <th style={{ width: 70 }}>AVG</th>
-                <th style={{ width: 70 }}>OBP</th>
-                <th style={{ width: 70 }}>SLG</th>
-                <th style={{ width: 70 }}>RBI</th>
+                <th style={{ width: 70 }} title={GLOSSARY.AVG}>
+                  AVG
+                </th>
+                <th style={{ width: 70 }} title={GLOSSARY.OBP}>
+                  OBP
+                </th>
+                <th style={{ width: 70 }} title={GLOSSARY.SLG}>
+                  SLG
+                </th>
+                <th style={{ width: 70 }} title={GLOSSARY.RBI}>
+                  RBI
+                </th>
                 <th style={{ width: 140 }}></th>
               </tr>
             </thead>

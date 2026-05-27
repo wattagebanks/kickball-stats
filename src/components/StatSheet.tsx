@@ -12,8 +12,17 @@ import type {
 } from "../types";
 import { POSITION_BY_ID, POSITIONS } from "../types";
 import { uid } from "../storage";
+import { GLOSSARY } from "../glossary";
 
 const RATING_VALUES: DefenseRating[] = [1, 2, 3, 4, 5];
+
+const RATING_LABELS: Record<DefenseRating, string> = {
+  1: "1 star — poor",
+  2: "2 star — below average",
+  3: "3 star — average",
+  4: "4 star — good",
+  5: "5 star — excellent",
+};
 
 function sideLabel(side: Position["side"]): string {
   switch (side) {
@@ -30,11 +39,11 @@ function sideLabel(side: Position["side"]): string {
 
 const KICK_RESULTS: { id: KickResult; label: string; hint: string }[] = [
   { id: "OUT", label: "Out", hint: "Made out" },
-  { id: "1B", label: "1B", hint: "Single" },
-  { id: "2B", label: "2B", hint: "Double" },
-  { id: "3B", label: "3B", hint: "Triple" },
+  { id: "1B", label: "1B", hint: "Single — reached 1st base" },
+  { id: "2B", label: "2B", hint: "Double — reached 2nd base" },
+  { id: "3B", label: "3B", hint: "Triple — reached 3rd base" },
   { id: "HR", label: "HR", hint: "Home run" },
-  { id: "BB", label: "BB", hint: "Walk" },
+  { id: "BB", label: "BB", hint: "Walk (base on balls)" },
   { id: "SAC", label: "SAC", hint: "Sacrifice" },
   { id: "FC", label: "FC", hint: "Fielder's choice" },
   { id: "E", label: "ROE", hint: "Reached on error" },
@@ -280,9 +289,21 @@ export function StatSheet({
                   <th style={{ width: 36 }}>#</th>
                   <th>Kicker</th>
                   <th>Result</th>
-                  <th style={{ width: 70 }}>RBI</th>
-                  <th style={{ width: 80 }}>Runs</th>
-                  <th style={{ width: 90 }}>Kicker scored</th>
+                  <th style={{ width: 70 }} title={GLOSSARY.RBI}>
+                    RBI
+                  </th>
+                  <th
+                    style={{ width: 80 }}
+                    title="Team runs scored during this at-bat"
+                  >
+                    Runs
+                  </th>
+                  <th
+                    style={{ width: 90 }}
+                    title="Did the kicker score on this at-bat?"
+                  >
+                    Kicker scored
+                  </th>
                   <th></th>
                   <th style={{ width: 90 }}></th>
                 </tr>
@@ -429,9 +450,15 @@ export function StatSheet({
                 <tr>
                   <th>Player</th>
                   <th>Position</th>
-                  <th style={{ width: 70 }}>PO</th>
-                  <th style={{ width: 70 }}>A</th>
-                  <th style={{ width: 70 }}>E</th>
+                  <th style={{ width: 70 }} title={GLOSSARY.PO}>
+                    PO
+                  </th>
+                  <th style={{ width: 70 }} title={GLOSSARY.A}>
+                    A
+                  </th>
+                  <th style={{ width: 70 }} title={GLOSSARY.E}>
+                    E
+                  </th>
                   <th>Notes</th>
                   <th style={{ width: 90 }}></th>
                 </tr>
@@ -603,7 +630,7 @@ export function StatSheet({
                               }`}
                               role="radio"
                               aria-checked={selected}
-                              title={`${r} star${r === 1 ? "" : "s"}`}
+                              title={RATING_LABELS[r]}
                               onClick={() =>
                                 upsertDefenseNote(player.id, position.id, {
                                   rating: selected ? undefined : r,

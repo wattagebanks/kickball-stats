@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Game, Player, PositionId } from "../types";
-import { POSITIONS } from "../types";
+import { POSITION_BY_ID, POSITIONS } from "../types";
 import {
   aggregatePlayerStats,
   averageRating,
@@ -11,6 +11,8 @@ import {
   onBasePct,
   sluggingPct,
 } from "../stats";
+import { GLOSSARY, GLOSSARY_ENTRIES } from "../glossary";
+import { Abbr } from "./Abbr";
 
 interface DashboardProps {
   players: Player[];
@@ -45,9 +47,11 @@ export function Dashboard({ players, games }: DashboardProps) {
 
   function header(key: SortKey, label: string, width?: number) {
     const active = sortKey === key;
+    const tip = GLOSSARY[label];
     return (
       <th
         style={{ cursor: "pointer", width }}
+        title={tip}
         onClick={() => {
           if (active) {
             setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -96,18 +100,18 @@ export function Dashboard({ players, games }: DashboardProps) {
               <thead>
                 <tr>
                   {header("name", "Player")}
-                  <th>PA</th>
-                  <th>AB</th>
-                  <th>H</th>
+                  <th title={GLOSSARY.PA}>PA</th>
+                  <th title={GLOSSARY.AB}>AB</th>
+                  <th title={GLOSSARY.H}>H</th>
                   {header("hr", "HR", 60)}
                   {header("rbi", "RBI", 60)}
-                  <th>R</th>
+                  <th title={GLOSSARY.R}>R</th>
                   {header("avg", "AVG", 70)}
                   {header("obp", "OBP", 70)}
                   {header("slg", "SLG", 70)}
-                  <th>PO</th>
-                  <th>A</th>
-                  <th>E</th>
+                  <th title={GLOSSARY.PO}>PO</th>
+                  <th title={GLOSSARY.A}>A</th>
+                  <th title={GLOSSARY.E}>E</th>
                   {header("fpct", "F%", 70)}
                 </tr>
               </thead>
@@ -157,10 +161,10 @@ export function Dashboard({ players, games }: DashboardProps) {
                     </th>
                   ))}
                   <th title="Best infield position (by average rating)">
-                    Best IF
+                    Best <Abbr code="IF" />
                   </th>
                   <th title="Best outfield position (by average rating)">
-                    Best OF
+                    Best <Abbr code="OF" />
                   </th>
                   <th>Latest notes</th>
                 </tr>
@@ -223,7 +227,12 @@ export function Dashboard({ players, games }: DashboardProps) {
                       })}
                       <td>
                         {bestIF ? (
-                          <span className="pill side-pill side-infield">
+                          <span
+                            className="pill side-pill side-infield"
+                            title={`Strongest infield spot so far — ${
+                              POSITION_BY_ID[bestIF]?.label ?? bestIF
+                            }`}
+                          >
                             {bestIF}{" "}
                             <span className="muted">
                               {averageRating(s, bestIF)?.toFixed(1)}★
@@ -235,7 +244,12 @@ export function Dashboard({ players, games }: DashboardProps) {
                       </td>
                       <td>
                         {bestOF ? (
-                          <span className="pill side-pill side-outfield">
+                          <span
+                            className="pill side-pill side-outfield"
+                            title={`Strongest outfield spot so far — ${
+                              POSITION_BY_ID[bestOF]?.label ?? bestOF
+                            }`}
+                          >
                             {bestOF}{" "}
                             <span className="muted">
                               {averageRating(s, bestOF)?.toFixed(1)}★
@@ -266,6 +280,33 @@ export function Dashboard({ players, games }: DashboardProps) {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Glossary</h2>
+        <p className="tiny" style={{ marginTop: 0 }}>
+          Hover any abbreviation in the app to see its meaning. Reference list:
+        </p>
+        {(
+          [
+            ["kicking", "Kicking results"],
+            ["batting", "Batting stats"],
+            ["fielding", "Fielding stats"],
+            ["position", "Positions"],
+          ] as const
+        ).map(([group, title]) => (
+          <div key={group} className="glossary-group">
+            <h3>{title}</h3>
+            <dl className="glossary">
+              {GLOSSARY_ENTRIES.filter((e) => e.group === group).map((e) => (
+                <div key={`${group}-${e.code}`} className="row-item">
+                  <dt>{e.code}</dt>
+                  <dd>{e.description}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
       </div>
 
       <div className="card">
